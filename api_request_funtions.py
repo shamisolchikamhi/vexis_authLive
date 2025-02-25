@@ -1,6 +1,7 @@
 import json
 import ast
 import pandas as pd
+import numpy as np
 import http.client
 
 class ApiGet:
@@ -28,6 +29,8 @@ class ApiGet:
         except json.JSONDecodeError:
             return {"error": "Failed to parse JSON response"}
 
+
+
     def process_reponse_df(self, json_response):
         if isinstance(json_response, str):
             try:
@@ -54,13 +57,18 @@ class ApiGet:
 
     def fix_data_types(self, df):
         for col in df.columns:
+            # Convert column to numeric where possible
             df[col] = pd.to_numeric(df[col], errors='ignore')
 
             # If column is numeric, check if it contains only whole numbers
             if pd.api.types.is_numeric_dtype(df[col]):
-                if all(isinstance(x, (int, float)) and (float(x).is_integer() if isinstance(x, float) else True) for x
-                       in df[col].dropna()):
-                    df[col] = df[col].astype(int)
+                # Replace infinite values with NaN
+                df[col] = df[col].replace([np.inf, -np.inf], np.nan)
+
+                # If all non-null values are whole numbers, convert to int
+                if all(isinstance(x, (int, float)) and (float(x).is_integer() if isinstance(x, float) else True)
+                       for x in df[col].dropna()):
+                    df[col] = df[col].fillna(0).astype(int)
 
         return df
 
