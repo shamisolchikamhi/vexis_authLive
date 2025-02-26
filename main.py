@@ -23,36 +23,36 @@ def fetch_and_save(end_piont, destination_table, write_options = 'overwrite', us
         ids = df[id_col].dropna().unique()
         return ids
 
-# # products
-# product_ids = fetch_and_save(end_piont='/api/external/products', destination_table='products', id_col="product_id")
-# fetch_and_save(end_piont='/api/external/products/{}', destination_table='product_info', use_ids=product_ids)
-# fetch_and_save(end_piont='/api/external/products/{}/pricing_options?affiliate_id=',
-#                destination_table='product_price_details', use_ids=product_ids)
-#
-# # bumps
-# bump_ids = fetch_and_save(end_piont='/api/external/bumps', destination_table='bumps', id_col='bump_id')
-# fetch_and_save(end_piont='/api/external/bumps/{}', destination_table='bumps_info', use_ids=bump_ids)
-# fetch_and_save(end_piont='/api/external/bumps/{}/pricing_options', destination_table='bump_price_details', use_ids=bump_ids)
-#
-# # upsells
-# upsell_ids = fetch_and_save(end_piont='/api/external/upsells', destination_table='upsells', id_col='upsell_id')
-# fetch_and_save(end_piont='/api/external/upsells/{}', destination_table='upsells_info', use_ids=upsell_ids)
-# fetch_and_save(end_piont='/api/external/upsells/{}/pricing_options',
-#                destination_table='upsells_price_details', use_ids=upsell_ids)
-#
-# # downsells
-# downsell_id = fetch_and_save(end_piont='/api/external/downsells', destination_table='downsells', id_col='downsell_id')
-# fetch_and_save(end_piont='/api/external/downsells/{}', destination_table='downsells_info', use_ids=downsell_id)
-# fetch_and_save(end_piont='/api/external/downsells/{}/pricing_options',
-#                destination_table='downsells_price_details', use_ids=downsell_id)
+# products
+product_ids = fetch_and_save(end_piont='/api/external/products', destination_table='products', id_col="product_id")
+fetch_and_save(end_piont='/api/external/products/{}', destination_table='product_info', use_ids=product_ids)
+fetch_and_save(end_piont='/api/external/products/{}/pricing_options?affiliate_id=',
+               destination_table='product_price_details', use_ids=product_ids)
+
+# bumps
+bump_ids = fetch_and_save(end_piont='/api/external/bumps', destination_table='bumps', id_col='bump_id')
+fetch_and_save(end_piont='/api/external/bumps/{}', destination_table='bumps_info', use_ids=bump_ids)
+fetch_and_save(end_piont='/api/external/bumps/{}/pricing_options', destination_table='bump_price_details', use_ids=bump_ids)
+
+# upsells
+upsell_ids = fetch_and_save(end_piont='/api/external/upsells', destination_table='upsells', id_col='upsell_id')
+fetch_and_save(end_piont='/api/external/upsells/{}', destination_table='upsells_info', use_ids=upsell_ids)
+fetch_and_save(end_piont='/api/external/upsells/{}/pricing_options',
+               destination_table='upsells_price_details', use_ids=upsell_ids)
+
+# downsells
+downsell_id = fetch_and_save(end_piont='/api/external/downsells', destination_table='downsells', id_col='downsell_id')
+fetch_and_save(end_piont='/api/external/downsells/{}', destination_table='downsells_info', use_ids=downsell_id)
+fetch_and_save(end_piont='/api/external/downsells/{}/pricing_options',
+               destination_table='downsells_price_details', use_ids=downsell_id)
 
 # transactions
-x = thrivecart_get.fetch_data(end_point=f'/api/external/transactions?page=0&perPage=0&query=&transactionType=any')
-pages = list(range(1, round(x['meta']['total'] / 100) + 1))
-for page in pages:
-    x= thrivecart_get.fetch_data(end_point=f'/api/external/transactions?page={page}&perPage=100&query=&transactionType=any')
-    ndjson_lines = "\n".join(json.dumps(transaction) for transaction in x["transactions"])
-    ndjson_buffer = io.StringIO(ndjson_lines)
-    thrivecart_save.start_transfer_json(bq_client=bq_client, file=ndjson_buffer,
-                                          destination_table = 'transactions', write_options='append')
-    time.sleep(0.5)  # Prevent hitting API rate limits
+# x = thrivecart_get.fetch_data(end_point=f'/api/external/transactions?page=0&perPage=0&query=&transactionType=any')
+# pages = list(range(1, round(x['meta']['total'] / 100) + 1))
+# for page in pages:
+#     x= thrivecart_get.fetch_data(end_point=f'/api/external/transactions?page={page}&perPage=100&query=&transactionType=any')
+#     ndjson_lines = "\n".join(json.dumps(transaction) for transaction in x["transactions"])
+#     ndjson_buffer = io.StringIO(ndjson_lines)
+#     thrivecart_save.start_transfer_json(bq_client=bq_client, file=ndjson_buffer,
+#                                           destination_table = 'transactions', write_options='append')
+#     time.sleep(0.5)  # Prevent hitting API rate limits

@@ -33,8 +33,8 @@ class ApiGet:
         results = []
 
         for id in ids:
-            end_point = end_point.format(id)
-            data = self.fetch_data(end_point=end_point)
+            end_point_id = end_point.format(id)
+            data = self.fetch_data(end_point=end_point_id)
             results.append(data)
 
         return results
@@ -46,22 +46,23 @@ class ApiGet:
                 json_response = json.loads(json_response)
             except json.JSONDecodeError:
                 try:
-                    # Handle improperly formatted JSON with single quotes using
+                    # Handle improperly formatted JSON with single quotes
                     json_response = ast.literal_eval(json_response)
                 except (ValueError, SyntaxError):
                     raise ValueError("Invalid JSON string provided.")
 
+        # Original method: handles dictionaries and simple lists of dictionaries
         if isinstance(json_response, dict):
-            # Convert a dictionary to a DataFrame
             return pd.DataFrame([json_response])
 
+        if  all(isinstance(sublist, list) for sublist in json_response):
+            flat_list = [item for sublist in json_response for item in sublist]
+            return pd.DataFrame(flat_list)
+
         if isinstance(json_response, list):
-            # Convert a list of dictionaries to a DataFrame
-            return pd.DataFrame(json_response)
+                return pd.DataFrame(json_response)
 
         raise ValueError("JSON response must be a dictionary or a list of dictionaries.")
-
-        return df
 
     def fix_data_types(self, df):
         for col in df.columns:
@@ -79,4 +80,3 @@ class ApiGet:
                     df[col] = df[col].fillna(0).astype(int)
 
         return df
-
