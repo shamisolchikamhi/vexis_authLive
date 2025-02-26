@@ -5,19 +5,23 @@ thrivecart_get = ApiGet(http='thrivecart.com', api_key='TZ5TJYBR-FDB85IBI-0RFTB0
 thrivecart_save = BqDataTransfers(gcp_project_id= 'arboreal-cat-451816-n0', bq_data_set = 'thrive_cart')
 bq_client = thrivecart_save.get_bq_client("C:/Users/shami/iCloudDrive/Personal Projects/vexis/vexis_bq_writter.json")
 
-def fetch_and_save(end_piont, destination_table):
+def fetch_and_save(end_piont, destination_table, id_col = None):
     x = thrivecart_get.fetch_data(end_point=end_piont)
     df = thrivecart_get.process_reponse_df(x)
     df = thrivecart_get.fix_data_types(df)
     thrivecart_save.start_transfer(bq_client=bq_client, df = df, destination_table = destination_table)
 
+    if id_col is not None:
+        ids = df[id_col].dropna().unique()
+        return ids
+
 # products
-fetch_and_save(end_piont='/api/external/products', destination_table='products')
+product_ids = fetch_and_save(end_piont='/api/external/products', destination_table='products', id_col="product_id")
 # bump offers
-fetch_and_save(end_piont='/api/external/bumps', destination_table='bumps')
+bump_ids = fetch_and_save(end_piont='/api/external/bumps', destination_table='bumps', id_col='bump_id')
 # upsells
-fetch_and_save(end_piont='/api/external/upsells', destination_table='upsells')
+upsell_ids = fetch_and_save(end_piont='/api/external/upsells', destination_table='upsells', id_col='upsell_id')
 # downsells
-fetch_and_save(end_piont='/api/external/downsells', destination_table='downsells')
+downsell_id = fetch_and_save(end_piont='/api/external/downsells', destination_table='downsells', id_col='downsell_id')
 
 # based on ids

@@ -29,7 +29,15 @@ class ApiGet:
         except json.JSONDecodeError:
             return {"error": "Failed to parse JSON response"}
 
+    def fetch_data_id(self, end_point, ids):
+        results = []
 
+        for id in ids:
+            end_point = f'{end_point}/{id}'
+            data = self.fetch_data(end_point=end_point)
+            results.append(data)
+
+        return results
 
     def process_reponse_df(self, json_response):
         if isinstance(json_response, str):
