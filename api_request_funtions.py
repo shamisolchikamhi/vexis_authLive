@@ -33,7 +33,7 @@ class ApiGet:
         results = []
 
         for id in ids:
-            end_point = f'{end_point}/{id}'
+            end_point = end_point.format(id)
             data = self.fetch_data(end_point=end_point)
             results.append(data)
 

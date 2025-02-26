@@ -21,8 +21,8 @@ class BqDataTransfers:
 
         return table_id
 
-    def start_transfer(self, bq_client ,df, destination_table, schema=None, write_options='overwrite',
-                       clustering=None):
+    def start_transfer_df(self, bq_client, df, destination_table, schema=None, write_options='overwrite',
+                          clustering=None):
 
         if write_options == 'overwrite':
             write_options = bigquery.WriteDisposition.WRITE_TRUNCATE
@@ -41,3 +41,21 @@ class BqDataTransfers:
         job_configuration.write_disposition = write_options
         table_id = self.bq_table_id(destination_table=destination_table)
         bq_client.load_table_from_dataframe(df, table_id, job_config=job_configuration).result()
+
+    def start_transfer_json(self, bq_client, file, destination_table, schema=None, write_options='overwrite'):
+        if write_options == 'overwrite':
+            write_options = bigquery.WriteDisposition.WRITE_TRUNCATE
+        elif write_options == 'append':
+            write_options = bigquery.WriteDisposition.WRITE_APPEND
+        else:
+            write_options = bigquery.WriteDisposition.WRITE_EMPTY
+
+        job_configuration = bigquery.LoadJobConfig(
+            source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+            autodetect=True,
+            schema=schema,
+        )
+        job_configuration.write_disposition = write_options
+        table_id = self.bq_table_id(destination_table=destination_table)
+        job = bq_client.load_table_from_file(file,  table_id, job_config=job_configuration)
+        job.result()
