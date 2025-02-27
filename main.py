@@ -49,7 +49,8 @@ def fetch_downsells(event, context):
 
 def fetch_transactions(event, context):
     x = thrivecart_get.fetch_data(end_point=f'/api/external/transactions?page=0&perPage=0&query=&transactionType=any')
-    pages = list(range(1, round(x['meta']['total'] / 100) + 1))
+    # pages = list(range(1, round(x['meta']['total'] / 100) + 1))
+    pages = list(range(1, 5))  #limiting to 5 pages for now
     for page in pages:
         x = thrivecart_get.fetch_data(
             end_point=f'/api/external/transactions?page={page}&perPage=100&query=&transactionType=any')
@@ -57,4 +58,4 @@ def fetch_transactions(event, context):
         ndjson_buffer = io.StringIO(ndjson_lines)
         thrivecart_save.start_transfer_json(bq_client=bq_client, file=ndjson_buffer,
                                               destination_table = 'transactions', write_options='append')
-        time.sleep(0.5)  # Prevent hitting API rate limits
+        time.sleep(0.5)

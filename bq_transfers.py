@@ -1,5 +1,6 @@
 from google.cloud import bigquery
 from google.oauth2 import service_account
+from google.auth import default
 
 class BqDataTransfers:
     def __init__(self, gcp_project_id, bq_data_set):
@@ -7,14 +8,17 @@ class BqDataTransfers:
         self.bq_data_set = bq_data_set
 
     def get_bq_client(self, service_account_json):
-        credentials = service_account.Credentials.from_service_account_file(
-            service_account_json
-        )
-        project_id = self.gcp_project_id
-        bq_client = bigquery.Client(project_id, credentials)
+        try:
+            credentials = service_account.Credentials.from_service_account_file(
+                service_account_json
+            )
+            project_id = self.gcp_project_id
+            bq_client = bigquery.Client(project_id, credentials)
+        except:
+            credentials, project = default()
+            bq_client = bigquery.Client(credentials=credentials, project=project)
 
         return bq_client
-
 
     def bq_table_id(self, destination_table):
         table_id = f"{self.gcp_project_id}.{self.bq_data_set}.{destination_table}"

@@ -3,6 +3,7 @@ import ast
 import pandas as pd
 import numpy as np
 import http.client
+import time
 
 class ApiGet:
     def __init__(self, http, api_key):
@@ -39,6 +40,7 @@ class ApiGet:
                 pass
             else:
                 results.append(data)
+            time.sleep(0.5)
 
         return results
 
