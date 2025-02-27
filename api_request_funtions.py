@@ -35,7 +35,10 @@ class ApiGet:
         for id in ids:
             end_point_id = end_point.format(id)
             data = self.fetch_data(end_point=end_point_id)
-            results.append(data)
+            if isinstance(data, dict) and data.get("error") == "Failed to parse JSON response":
+                pass
+            else:
+                results.append(data)
 
         return results
 
@@ -57,7 +60,7 @@ class ApiGet:
 
         if  all(isinstance(sublist, list) for sublist in json_response):
             flat_list = [item for sublist in json_response for item in sublist]
-            return pd.DataFrame(flat_list)
+            return pd.DataFrame([item for item in flat_list if isinstance(item, dict)])
 
         if isinstance(json_response, list):
                 return pd.DataFrame(json_response)
