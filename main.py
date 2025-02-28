@@ -81,3 +81,16 @@ def fetch_transactions(event, context):
             )
 
         time.sleep(1)
+
+#     remove duplicates if any
+    query = """create or replace table 
+            `arboreal-cat-451816-n0.thrive_cart.transactions_copy`
+            as 
+            SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.transactions` WHERE date = "2025-02-28" ;
+            delete from `arboreal-cat-451816-n0.thrive_cart.transactions` WHERE date = "2025-02-28";
+            insert into `arboreal-cat-451816-n0.thrive_cart.transactions` 
+            select * from `arboreal-cat-451816-n0.thrive_cart.transactions_copy`;
+            drop table `arboreal-cat-451816-n0.thrive_cart.transactions_copy`;
+            """
+    query_job = bq_client.query(query)
+    query_job.result()
