@@ -59,6 +59,7 @@ def fetch_transactions(event, context):
     # Calculate the difference and determine the number of pages to fetch
     records_to_fetch = max(0, total_records_api - total_records_bq)
     pages = list(range(1, (records_to_fetch // 100) + 2)) if records_to_fetch > 0 else []
+    pages = reversed(pages)
 
     # Fetch new transactions
     for page in pages:
