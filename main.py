@@ -30,18 +30,21 @@ def fetch_products(event, context):
                    destination_table='product_price_details', use_ids=product_ids)
 
 def fetch_bumps(event, context):
+    time.sleep(30)
     bump_ids = fetch_and_save(end_piont='/api/external/bumps', destination_table='bumps', id_col='bump_id')
     fetch_and_save(end_piont='/api/external/bumps/{}', destination_table='bumps_info', use_ids=bump_ids)
     fetch_and_save(end_piont='/api/external/bumps/{}/pricing_options',
                    destination_table='bump_price_details', use_ids=bump_ids)
 
 def fetch_upsells(event, context):
+    time.sleep(60)
     upsell_ids = fetch_and_save(end_piont='/api/external/upsells', destination_table='upsells', id_col='upsell_id')
     fetch_and_save(end_piont='/api/external/upsells/{}', destination_table='upsells_info', use_ids=upsell_ids)
     fetch_and_save(end_piont='/api/external/upsells/{}/pricing_options',
                    destination_table='upsells_price_details', use_ids=upsell_ids)
 
 def fetch_downsells(event, context):
+    time.sleep(90)
     downsell_id = fetch_and_save(end_piont='/api/external/downsells', destination_table='downsells', id_col='downsell_id')
     fetch_and_save(end_piont='/api/external/downsells/{}', destination_table='downsells_info', use_ids=downsell_id)
     fetch_and_save(end_piont='/api/external/downsells/{}/pricing_options',
