@@ -51,14 +51,33 @@ def fetch_downsells(event, context):
                    destination_table='downsells_price_details', use_ids=downsell_id)
 
 def fetch_transactions(event, context):
+    # Fetch the total count of transactions from the API
     x = thrivecart_get.fetch_data(end_point=f'/api/external/transactions?page=0&perPage=0&query=&transactionType=any')
-    # pages = list(range(1, round(x['meta']['total'] / 100) + 1))
-    pages = list(range(1, 5))  #limiting to 5 pages for now
+    total_records_api = x['meta']['total']
+    total_records_bq = bq_client.get_table('thrive_cart.transactions').num_rows
+
+    # Calculate the difference and determine the number of pages to fetch
+    records_to_fetch = max(0, total_records_api - total_records_bq)
+    pages = list(range(1, (records_to_fetch // 100) + 2)) if records_to_fetch > 0 else []
+
+    # Fetch new transactions
     for page in pages:
         x = thrivecart_get.fetch_data(
-            end_point=f'/api/external/transactions?page={page}&perPage=100&query=&transactionType=any')
-        ndjson_lines = "\n".join(json.dumps(transaction) for transaction in x["transactions"])
-        ndjson_buffer = io.StringIO(ndjson_lines)
-        thrivecart_save.start_transfer_json(bq_client=bq_client, file=ndjson_buffer,
-                                              destination_table = 'transactions', write_options='append')
-        time.sleep(0.5)
+            end_point=f'/api/external/transactions?page={page}&perPage=100&query=&transactionType=any'
+        )
+        transactions = x.get("transactions", [])
+
+        if transactions:
+            # Convert to NDJSON format
+            ndjson_lines = "\n".join(json.dumps(transaction) for transaction in transactions)
+            ndjson_buffer = io.StringIO(ndjson_lines)
+
+            # Upload to BigQuery, ensuring no duplicates based on transaction_id
+            thrivecart_save.start_transfer_json(
+                bq_client=bq_client,
+                file=ndjson_buffer,
+                destination_table='transactions',
+                write_options='append'
+            )
+
+        time.sleep(1)
