@@ -37,10 +37,13 @@ class ApiGet:
             end_point_id = end_point.format(id)
             data = self.fetch_data(end_point=end_point_id)
             if isinstance(data, dict) and data.get("error") == "Failed to parse JSON response":
+                time.sleep(10)
+                data = self.fetch_data(end_point=end_point_id)
+            if isinstance(data, dict) and data.get("error") == "Failed to parse JSON response":
                 pass
             else:
                 results.append(data)
-            time.sleep(0.5)
+            time.sleep(1)
 
         return results
 
@@ -60,12 +63,14 @@ class ApiGet:
         if isinstance(json_response, dict):
             return pd.DataFrame([json_response])
 
-        if  all(isinstance(sublist, list) for sublist in json_response):
+        if all(isinstance(sublist, list) for sublist in json_response):
             flat_list = [item for sublist in json_response for item in sublist]
-            return pd.DataFrame([item for item in flat_list if isinstance(item, dict)])
+            # Ensure that nested dictionaries are preserved
+            return pd.DataFrame([item if isinstance(item, dict) else {} for item in flat_list])
 
         if isinstance(json_response, list):
-                return pd.DataFrame(json_response)
+            # Check if each item is a dictionary, otherwise convert to an empty dictionary
+            return pd.DataFrame([item if isinstance(item, dict) else {} for item in json_response])
 
         raise ValueError("JSON response must be a dictionary or a list of dictionaries.")
 

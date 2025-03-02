@@ -1,6 +1,8 @@
 from google.cloud import bigquery
 from google.oauth2 import service_account
 from google.auth import default
+from google.cloud import pubsub_v1
+import json
 
 class BqDataTransfers:
     def __init__(self, gcp_project_id, bq_data_set):
@@ -43,8 +45,12 @@ class BqDataTransfers:
         )
 
         job_configuration.write_disposition = write_options
-        table_id = self.bq_table_id(destination_table=destination_table)
-        bq_client.load_table_from_dataframe(df, table_id, job_config=job_configuration).result()
+        try:
+            table_id = self.bq_table_id(destination_table=destination_table)
+            bq_client.load_table_from_dataframe(df, table_id, job_config=job_configuration).result()
+        except:
+            table_id = self.bq_table_id(destination_table=f'{destination_table}_errors')
+            bq_client.load_table_from_dataframe(df, table_id, job_config=job_configuration).result()
 
     def start_transfer_json(self, bq_client, file, destination_table, schema=None, write_options='overwrite'):
         if write_options == 'overwrite':
@@ -63,3 +69,11 @@ class BqDataTransfers:
         table_id = self.bq_table_id(destination_table=destination_table)
         job = bq_client.load_table_from_file(file,  table_id, job_config=job_configuration)
         job.result()
+
+publisher = pubsub_v1.PublisherClient()
+def pub_sub_message_publisher(project_id, topic, message):
+    topic_path = publisher.topic_path(project_id, topic)
+    new_message = {
+        'result': message
+    }
+    publisher.publish(topic_path, json.dumps(new_message).encode('utf-8'))
