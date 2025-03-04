@@ -1,7 +1,7 @@
 from google.cloud import bigquery
 from google.oauth2 import service_account
 from google.auth import default
-from google.cloud import pubsub_v1
+# from google.cloud import pubsub_v1
 import json
 
 class BqDataTransfers:
@@ -70,10 +70,10 @@ class BqDataTransfers:
         job = bq_client.load_table_from_file(file,  table_id, job_config=job_configuration)
         job.result()
 
-publisher = pubsub_v1.PublisherClient()
-def pub_sub_message_publisher(project_id, topic, message):
-    topic_path = publisher.topic_path(project_id, topic)
-    new_message = {
-        'result': message
-    }
-    publisher.publish(topic_path, json.dumps(new_message).encode('utf-8'))
+# publisher = pubsub_v1.PublisherClient()
+# def pub_sub_message_publisher(project_id, topic, message):
+#     topic_path = publisher.topic_path(project_id, topic)
+#     new_message = {
+#         'result': message
+#     }
+#     publisher.publish(topic_path, json.dumps(new_message).encode('utf-8'))

@@ -1,4 +1,5 @@
 from api_request_funtions import ApiGet
+from api_request_funtions import ApiGetRequest
 from bq_transfers import BqDataTransfers
 from  bq_transfers import pub_sub_message_publisher
 import json
@@ -10,11 +11,11 @@ thrivecart_get = ApiGet(http='thrivecart.com', api_key='TZ5TJYBR-FDB85IBI-0RFTB0
 thrivecart_save = BqDataTransfers(gcp_project_id= project_id, bq_data_set = 'thrive_cart')
 bq_client = thrivecart_save.get_bq_client("/Users/shami/Library/Mobile Documents/com~apple~CloudDocs/Personal Projects/vexis/vexis_bq_writter.json")
 
-def fetch_and_save(end_piont, destination_table, write_options = 'overwrite', use_ids=[], id_col = None, schema = None):
+def fetch_and_save(end_point, destination_table, write_options ='overwrite', use_ids=[], id_col = None, schema = None):
     if len(use_ids) > 0:
-        x = thrivecart_get.fetch_data_id(end_point=end_piont, ids=use_ids)
+        x = thrivecart_get.fetch_data_id(end_point=end_point, ids=use_ids)
     else:
-        x = thrivecart_get.fetch_data(end_point=end_piont)
+        x = thrivecart_get.fetch_data(end_point=end_point)
 
     df = thrivecart_get.process_reponse_df(x)
     df = thrivecart_get.fix_data_types(df)
@@ -26,40 +27,40 @@ def fetch_and_save(end_piont, destination_table, write_options = 'overwrite', us
         return ids
 
 def fetch_products(event, context):
-    product_ids = fetch_and_save(end_piont='/api/external/products', destination_table='products', id_col="product_id")
-    fetch_and_save(end_piont='/api/external/products/{}/pricing_options?affiliate_id=',
+    product_ids = fetch_and_save(end_point='/api/external/products', destination_table='products', id_col="product_id")
+    fetch_and_save(end_point='/api/external/products/{}/pricing_options?affiliate_id=',
                    destination_table='product_price_details', use_ids=product_ids)
-    fetch_and_save(end_piont='/api/external/products/{}', destination_table='product_info', use_ids=product_ids)
+    fetch_and_save(end_point='/api/external/products/{}', destination_table='product_info', use_ids=product_ids)
 
 
 def fetch_bumps(event, context):
-    bump_ids = fetch_and_save(end_piont='/api/external/bumps', destination_table='bumps', id_col='bump_id')
+    bump_ids = fetch_and_save(end_point='/api/external/bumps', destination_table='bumps', id_col='bump_id')
     try:
-        fetch_and_save(end_piont='/api/external/bumps/{}/pricing_options',
+        fetch_and_save(end_point='/api/external/bumps/{}/pricing_options',
                        destination_table='bump_price_details', use_ids=bump_ids)
-        fetch_and_save(end_piont='/api/external/bumps/{}', destination_table='bumps_info', use_ids=bump_ids)
+        fetch_and_save(end_point='/api/external/bumps/{}', destination_table='bumps_info', use_ids=bump_ids)
     except:
         pass
     pub_sub_message_publisher(project_id=project_id, topic ='thrive_cart_downsells_trigger',
                               message = 'Start downsells')
 
 def fetch_downsells(event, context):
-    downsell_id = fetch_and_save(end_piont='/api/external/downsells', destination_table='downsells', id_col='downsell_id')
+    downsell_id = fetch_and_save(end_point='/api/external/downsells', destination_table='downsells', id_col='downsell_id')
     try:
-        fetch_and_save(end_piont='/api/external/downsells/{}/pricing_options',
+        fetch_and_save(end_point='/api/external/downsells/{}/pricing_options',
                        destination_table='downsells_price_details', use_ids=downsell_id)
-        fetch_and_save(end_piont='/api/external/downsells/{}', destination_table='downsells_info', use_ids=downsell_id)
+        fetch_and_save(end_point='/api/external/downsells/{}', destination_table='downsells_info', use_ids=downsell_id)
     except:
         pass
     pub_sub_message_publisher(project_id=project_id, topic='thrive_cart_upsells_trigger',
                               message='Start upsells')
 
 def fetch_upsells(event, context):
-    upsell_ids = fetch_and_save(end_piont='/api/external/upsells', destination_table='upsells', id_col='upsell_id')
+    upsell_ids = fetch_and_save(end_point='/api/external/upsells', destination_table='upsells', id_col='upsell_id')
     try:
-        fetch_and_save(end_piont='/api/external/upsells/{}/pricing_options',
+        fetch_and_save(end_point='/api/external/upsells/{}/pricing_options',
                        destination_table='upsells_price_details', use_ids=upsell_ids)
-        fetch_and_save(end_piont='/api/external/upsells/{}', destination_table='upsells_info', use_ids=upsell_ids)
+        fetch_and_save(end_point='/api/external/upsells/{}', destination_table='upsells_info', use_ids=upsell_ids)
     except:
         pass
     pub_sub_message_publisher(project_id=project_id, topic='thrive_cart_affiliates_trigger',
@@ -195,3 +196,32 @@ def fetch_transactions(event, context):
             """
     query_job = bq_client.query(query)
     query_job.result()
+
+
+# WEBJAM
+def fetch_and_save_webjam(platform, end_point, dict_key, write_options, destination_table,
+                          schema = None, use_ids=[], id_col = None):
+    webjam = ApiGetRequest(domain = 'api.webinarjam.com', platform=platform, api_key='8f4a91cb-906e-448b-b5cb-de0a1854d96c')
+    webjam_save = BqDataTransfers(gcp_project_id= 'arboreal-cat-451816-n0', bq_data_set = 'webinar_jam')
+    bq_client = webjam_save.get_bq_client("/Users/shami/Library/Mobile Documents/com~apple~CloudDocs/Personal Projects/vexis/vexis_bq_writter.json")
+
+    if len(use_ids) > 0:
+        x = webjam.fetch_data_id(end_point=end_point, data_details_key= "webinar_id", ids=use_ids)
+    else:
+        x = webjam.fetch_data(end_point=end_point)
+    df = webjam.process_reponse_df(x, dict_key=dict_key)
+    webjam_save.start_transfer_df(bq_client=bq_client, df = df,
+                                          destination_table = f'{platform}_{destination_table}', write_options=write_options, schema=schema)
+    if id_col is not None:
+        ids = df[id_col].dropna().unique()
+        return ids
+
+webinar_ids = fetch_and_save_webjam(platform='webinarjam', end_point='webinars', dict_key = 'webinars',
+                      write_options='overwrite', destination_table = 'webinars', id_col = 'webinar_id')
+fetch_and_save_webjam(platform='webinarjam', end_point='webinar', dict_key = 'webinar',
+                      write_options='overwrite', destination_table = 'webinar_details', use_ids=webinar_ids)
+
+webinar_ids = fetch_and_save_webjam(platform='everwebinar', end_point='webinars', dict_key = 'webinars',
+                      write_options='overwrite', destination_table = 'webinars', id_col = 'webinar_id')
+fetch_and_save_webjam(platform='everwebinar', end_point='webinar', dict_key = 'webinar',
+                      write_options='overwrite', destination_table = 'webinar_details', use_ids=webinar_ids)

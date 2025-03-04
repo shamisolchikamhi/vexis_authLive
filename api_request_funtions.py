@@ -4,8 +4,10 @@ import pandas as pd
 import numpy as np
 import http.client
 import time
+import requests
 
 class ApiGet:
+    # using http client
     def __init__(self, http, api_key):
         self.http = http
         self.api_key = api_key
@@ -90,3 +92,43 @@ class ApiGet:
                     df[col] = df[col].fillna(0).astype(int)
 
         return df
+
+class ApiGetRequest:
+    def __init__(self, domain, api_key, platform):
+        self.domain = domain
+        self.api_key = api_key
+        self.platform = platform
+
+    def api_connection_auth(self):
+        data = {
+            "api_key": self.api_key
+        }
+
+        return data
+
+    def fetch_data(self, end_point, data_details = dict()):
+        url = f"https://{self.domain}/{self.platform}/{end_point}"
+        data = self.api_connection_auth()
+        data.update(data_details)
+        response = requests.post(url, data=data)
+
+        return response.json()
+
+    def fetch_data_id(self, end_point, data_details_key, ids):
+        results = []
+        for id in ids:
+            data_details = {data_details_key: id}
+            data = self.fetch_data(end_point=end_point, data_details=data_details)
+            results.append(data)
+            time.sleep(1)
+
+        return results
+
+    def process_reponse_df(self, json_response, dict_key):
+        if isinstance(json_response, dict):
+            df  = pd.DataFrame(json_response[dict_key])
+            return df
+
+        if isinstance(json_response, list):
+            df = pd.DataFrame([item[dict_key] if isinstance(item, dict) else {} for item in json_response])
+            return df
