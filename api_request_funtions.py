@@ -114,10 +114,12 @@ class ApiGetRequest:
 
         return response.json()
 
-    def fetch_data_id(self, end_point, data_details_key, ids):
+    def fetch_data_id(self, end_point, data_details_key, ids, registrants):
         results = []
         for id in ids:
             data_details = {data_details_key: id}
+            if registrants:
+                data_details.update({"date_range": 0})
             data = self.fetch_data(end_point=end_point, data_details=data_details)
             results.append(data)
             time.sleep(1)
@@ -125,6 +127,23 @@ class ApiGetRequest:
         return results
 
     def process_reponse_df(self, json_response, dict_key):
+        if dict_key == 'registrants':
+            df = pd.DataFrame([item[dict_key] if isinstance(item, dict) else {} for item in json_response])
+            all_data = [item for sublist in df['data'] if isinstance(sublist, list) for item in sublist]
+            df = pd.DataFrame(all_data)
+            if len(df) >0:
+                df = df.astype(str)
+                df[['id', 'lead_id']] = df[['id', 'lead_id']].astype(int)
+                df['signup_date'] = pd.to_datetime(df['signup_date'], format="%a, %d %b %Y, %I:%M %p", errors='coerce')
+                df['event'] = pd.to_datetime(df['event'], format="%a, %d %b %Y, %I:%M %p", errors='coerce')
+                df['date_live'] = pd.to_datetime(df['date_live'], format="%a, %d %b %Y, %I:%M %p", errors='coerce')
+                df['gdpr_status_date'] = pd.to_datetime(df['gdpr_status_date'], format="%a, %d %b %Y, %I:%M %p",
+                                                        errors='coerce')
+                df['time_live'] = pd.to_timedelta(df['time_live']).dt.total_seconds()/60
+                df['entered_live'] = pd.to_timedelta(df['entered_live']).dt.total_seconds()/60
+                df['time_replay'] = pd.to_timedelta(df['time_replay']).dt.total_seconds()/60
+            return df
+
         if isinstance(json_response, dict):
             df  = pd.DataFrame(json_response[dict_key])
             return df
