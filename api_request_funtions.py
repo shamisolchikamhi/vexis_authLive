@@ -4,8 +4,10 @@ import pandas as pd
 import numpy as np
 import http.client
 import time
+import requests
 
 class ApiGet:
+    # using http client
     def __init__(self, http, api_key):
         self.http = http
         self.api_key = api_key
@@ -90,3 +92,62 @@ class ApiGet:
                     df[col] = df[col].fillna(0).astype(int)
 
         return df
+
+class ApiGetRequest:
+    def __init__(self, domain, api_key, platform):
+        self.domain = domain
+        self.api_key = api_key
+        self.platform = platform
+
+    def api_connection_auth(self):
+        data = {
+            "api_key": self.api_key
+        }
+
+        return data
+
+    def fetch_data(self, end_point, data_details = dict()):
+        url = f"https://{self.domain}/{self.platform}/{end_point}"
+        data = self.api_connection_auth()
+        data.update(data_details)
+        response = requests.post(url, data=data)
+
+        return response.json()
+
+    def fetch_data_id(self, end_point, data_details_key, ids, registrants):
+        results = []
+        for id in ids:
+            data_details = {data_details_key: id}
+            if registrants:
+                data_details.update({"date_range": 1})
+            data = self.fetch_data(end_point=end_point, data_details=data_details)
+            results.append(data)
+            time.sleep(1)
+
+        return results
+
+    def process_reponse_df(self, json_response, dict_key):
+        if dict_key == 'registrants':
+            df = pd.DataFrame([item[dict_key] if isinstance(item, dict) else {} for item in json_response])
+            all_data = [item for sublist in df['data'] if isinstance(sublist, list) for item in sublist]
+            df = pd.DataFrame(all_data)
+            if len(df) >0:
+                df = df.astype(str)
+                df[['id', 'lead_id']] = df[['id', 'lead_id']].astype(int)
+                df['signup_date'] = pd.to_datetime(df['signup_date'], format="%a, %d %b %Y, %I:%M %p", errors='coerce')
+                df['event'] = pd.to_datetime(df['event'], format="%a, %d %b %Y, %I:%M %p", errors='coerce')
+                df['date_live'] = pd.to_datetime(df['date_live'], format="%a, %d %b %Y, %I:%M %p", errors='coerce')
+                df['gdpr_status_date'] = pd.to_datetime(df['gdpr_status_date'], format="%a, %d %b %Y, %I:%M %p",
+                                                        errors='coerce')
+                df['time_live'] = pd.to_timedelta(df['time_live']).dt.total_seconds()/60
+                df['entered_live'] = pd.to_timedelta(df['entered_live']).dt.total_seconds()/60
+                df['time_replay'] = pd.to_timedelta(df['time_replay']).dt.total_seconds()/60
+            return df
+
+        if isinstance(json_response, dict):
+            df  = pd.DataFrame(json_response[dict_key])
+            return df
+
+        if isinstance(json_response, list):
+            df = pd.DataFrame([item[dict_key] if isinstance(item, dict) else {} for item in json_response])
+            return df
