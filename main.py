@@ -238,7 +238,7 @@ def fetch_webinarjam(event, context):
         fetch_and_save_webjam(platform='webinarjam', end_point='webinar', dict_key = 'webinar',
                               write_options='overwrite', destination_table = 'webinar_details', use_ids=webinar_ids)
         fetch_and_save_webjam(platform='webinarjam', end_point='registrants', dict_key = 'registrants',
-                              write_options='overwrite', destination_table = 'registrants', use_ids=webinar_ids, registrants=True)
+                              write_options='append', destination_table = 'registrants', use_ids=webinar_ids, registrants=True)
     except:
         pass
     pub_sub_message_publisher(project_id=project_id, topic='webinar_jam_everwebinar_trigger', message='Start everwebinar')
@@ -249,4 +249,4 @@ def fetch_everwebinar(event, context):
     fetch_and_save_webjam(platform='everwebinar', end_point='webinar', dict_key = 'webinar',
                           write_options='overwrite', destination_table = 'webinar_details', use_ids=webinar_ids)
     fetch_and_save_webjam(platform='everwebinar', end_point='registrants', dict_key = 'registrants',
-                          write_options='overwrite', destination_table = 'registrants', use_ids=webinar_ids, registrants=True)
+                          write_options='append', destination_table = 'registrants', use_ids=webinar_ids, registrants=True)

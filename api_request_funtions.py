@@ -119,7 +119,7 @@ class ApiGetRequest:
         for id in ids:
             data_details = {data_details_key: id}
             if registrants:
-                data_details.update({"date_range": 0})
+                data_details.update({"date_range": 1})
             data = self.fetch_data(end_point=end_point, data_details=data_details)
             results.append(data)
             time.sleep(1)
