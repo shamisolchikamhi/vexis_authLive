@@ -134,11 +134,13 @@ class ApiGetRequest:
             if len(df) >0:
                 df = df.astype(str)
                 df[['id', 'lead_id']] = df[['id', 'lead_id']].astype(int)
-                df['signup_date'] = pd.to_datetime(df['signup_date'], format="%a, %d %b %Y, %I:%M %p", errors='coerce')
-                df['event'] = pd.to_datetime(df['event'], format="%a, %d %b %Y, %I:%M %p", errors='coerce')
-                df['date_live'] = pd.to_datetime(df['date_live'], format="%a, %d %b %Y, %I:%M %p", errors='coerce')
+                df['signup_date'] = pd.to_datetime(df['signup_date'], format="%a, %d %b %Y, %I:%M %p", errors='coerce',
+                                                   utc=True)
+                df['event'] = pd.to_datetime(df['event'], format="%a, %d %b %Y, %I:%M %p", errors='coerce', utc=True)
+                df['date_live'] = pd.to_datetime(df['date_live'], format="%a, %d %b %Y, %I:%M %p", errors='coerce',
+                                                 utc=True)
                 df['gdpr_status_date'] = pd.to_datetime(df['gdpr_status_date'], format="%a, %d %b %Y, %I:%M %p",
-                                                        errors='coerce')
+                                                        errors='coerce', utc=True)
                 df['time_live'] = pd.to_timedelta(df['time_live']).dt.total_seconds()/60
                 df['entered_live'] = pd.to_timedelta(df['entered_live']).dt.total_seconds()/60
                 df['time_replay'] = pd.to_timedelta(df['time_replay']).dt.total_seconds()/60

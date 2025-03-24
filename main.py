@@ -23,22 +23,50 @@ def fetch_and_save(end_point, destination_table, write_options ='overwrite', use
                                       destination_table = destination_table, write_options=write_options, schema=schema)
 
     if id_col is not None:
+        df = df[df['statusString'] == 'live']
         ids = df[id_col].dropna().unique()
         return ids
 
-def fetch_products(event, context):
+def fetch_products_details(event, context):
     product_ids = fetch_and_save(end_point='/api/external/products', destination_table='products', id_col="product_id")
-    fetch_and_save(end_point='/api/external/products/{}/pricing_options?affiliate_id=',
-                   destination_table='product_price_details', use_ids=product_ids)
-    fetch_and_save(end_point='/api/external/products/{}', destination_table='product_info', use_ids=product_ids)
+    try:
+        fetch_and_save(end_point='/api/external/products/{}/pricing_options?affiliate_id=',
+                       destination_table='product_price_details', use_ids=product_ids, write_options ='append')
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.product_price_details`  as 
+                           SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.product_price_details` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
+    except:
+        pass
+    pub_sub_message_publisher(project_id=project_id, topic='thrive_cart_products2_trigger',
+                              message='Continue products')
 
+
+def fetch_products_info(event, context):
+    product_ids = fetch_and_save(end_point='/api/external/products', destination_table='products', id_col="product_id")
+    fetch_and_save(end_point='/api/external/products/{}', destination_table='product_info', use_ids=product_ids,
+                   write_options='append')
+    update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.product_info`  as
+                           SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.product_info` """
+    query_job = bq_client.query(update_table)
+    query_job.result()
 
 def fetch_bumps(event, context):
     bump_ids = fetch_and_save(end_point='/api/external/bumps', destination_table='bumps', id_col='bump_id')
     try:
         fetch_and_save(end_point='/api/external/bumps/{}/pricing_options',
                        destination_table='bump_price_details', use_ids=bump_ids)
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.bump_price_details`  as
+                                   SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.bump_price_details` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
+
         fetch_and_save(end_point='/api/external/bumps/{}', destination_table='bumps_info', use_ids=bump_ids)
+
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.bumps_info`  as
+                                   SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.bumps_info` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
     except:
         pass
     pub_sub_message_publisher(project_id=project_id, topic ='thrive_cart_downsells_trigger',
@@ -49,7 +77,16 @@ def fetch_downsells(event, context):
     try:
         fetch_and_save(end_point='/api/external/downsells/{}/pricing_options',
                        destination_table='downsells_price_details', use_ids=downsell_id)
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.downsells_price_details`  as
+                            SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.downsells_price_details` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
+
         fetch_and_save(end_point='/api/external/downsells/{}', destination_table='downsells_info', use_ids=downsell_id)
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.downsells_info`  as
+                            SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.downsells_info` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
     except:
         pass
     pub_sub_message_publisher(project_id=project_id, topic='thrive_cart_upsells_trigger',
@@ -60,7 +97,16 @@ def fetch_upsells(event, context):
     try:
         fetch_and_save(end_point='/api/external/upsells/{}/pricing_options',
                        destination_table='upsells_price_details', use_ids=upsell_ids)
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.upsells_price_details`  as
+                            SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.upsells_price_details` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
+
         fetch_and_save(end_point='/api/external/upsells/{}', destination_table='upsells_info', use_ids=upsell_ids)
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.upsells_info`  as
+                            SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.upsells_info` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
     except:
         pass
     pub_sub_message_publisher(project_id=project_id, topic='thrive_cart_affiliates_trigger',
@@ -234,9 +280,9 @@ def fetch_and_save_webjam(platform, end_point, dict_key, write_options, destinat
 def fetch_webinarjam(event, context):
     try:
         webinar_ids = fetch_and_save_webjam(platform='webinarjam', end_point='webinars', dict_key = 'webinars',
-                              write_options='overwrite', destination_table = 'webinars', id_col = 'webinar_id')
+                              write_options='append', destination_table = 'webinars', id_col = 'webinar_id')
         fetch_and_save_webjam(platform='webinarjam', end_point='webinar', dict_key = 'webinar',
-                              write_options='overwrite', destination_table = 'webinar_details', use_ids=webinar_ids)
+                              write_options='append', destination_table = 'webinar_details', use_ids=webinar_ids)
         fetch_and_save_webjam(platform='webinarjam', end_point='registrants', dict_key = 'registrants',
                               write_options='append', destination_table = 'registrants', use_ids=webinar_ids, registrants=True)
     except:
@@ -245,8 +291,8 @@ def fetch_webinarjam(event, context):
 
 def fetch_everwebinar(event, context):
     webinar_ids = fetch_and_save_webjam(platform='everwebinar', end_point='webinars', dict_key = 'webinars',
-                          write_options='overwrite', destination_table = 'webinars', id_col = 'webinar_id')
+                          write_options='append', destination_table = 'webinars', id_col = 'webinar_id')
     fetch_and_save_webjam(platform='everwebinar', end_point='webinar', dict_key = 'webinar',
-                          write_options='overwrite', destination_table = 'webinar_details', use_ids=webinar_ids)
+                          write_options='append', destination_table = 'webinar_details', use_ids=webinar_ids)
     fetch_and_save_webjam(platform='everwebinar', end_point='registrants', dict_key = 'registrants',
                           write_options='append', destination_table = 'registrants', use_ids=webinar_ids, registrants=True)
