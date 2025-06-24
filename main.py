@@ -2,9 +2,16 @@ from api_request_funtions import ApiGet
 from api_request_funtions import ApiGetRequest
 from bq_transfers import BqDataTransfers
 from  bq_transfers import pub_sub_message_publisher
-import json
 import io
 import time
+import numpy as np
+from datetime import datetime
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError
+import pandas as pd
+import json
+from urllib.parse import urlencode
+
 
 project_id = 'arboreal-cat-451816-n0'
 thrivecart_get = ApiGet(http='thrivecart.com', api_key='TZ5TJYBR-FDB85IBI-0RFTB00N-VQ7ZFY2S')
@@ -23,22 +30,50 @@ def fetch_and_save(end_point, destination_table, write_options ='overwrite', use
                                       destination_table = destination_table, write_options=write_options, schema=schema)
 
     if id_col is not None:
+        df = df[df['statusString'] == 'live']
         ids = df[id_col].dropna().unique()
         return ids
 
-def fetch_products(event, context):
+def fetch_products_details(event, context):
     product_ids = fetch_and_save(end_point='/api/external/products', destination_table='products', id_col="product_id")
-    fetch_and_save(end_point='/api/external/products/{}/pricing_options?affiliate_id=',
-                   destination_table='product_price_details', use_ids=product_ids)
-    fetch_and_save(end_point='/api/external/products/{}', destination_table='product_info', use_ids=product_ids)
+    try:
+        fetch_and_save(end_point='/api/external/products/{}/pricing_options?affiliate_id=',
+                       destination_table='product_price_details', use_ids=product_ids, write_options ='append')
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.product_price_details`  as 
+                           SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.product_price_details` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
+    except:
+        pass
+    pub_sub_message_publisher(project_id=project_id, topic='thrive_cart_products2_trigger',
+                              message='Continue products')
 
+
+def fetch_products_info(event, context):
+    product_ids = fetch_and_save(end_point='/api/external/products', destination_table='products', id_col="product_id")
+    fetch_and_save(end_point='/api/external/products/{}', destination_table='product_info', use_ids=product_ids,
+                   write_options='append')
+    update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.product_info`  as
+                           SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.product_info` """
+    query_job = bq_client.query(update_table)
+    query_job.result()
 
 def fetch_bumps(event, context):
     bump_ids = fetch_and_save(end_point='/api/external/bumps', destination_table='bumps', id_col='bump_id')
     try:
         fetch_and_save(end_point='/api/external/bumps/{}/pricing_options',
                        destination_table='bump_price_details', use_ids=bump_ids)
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.bump_price_details`  as
+                                   SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.bump_price_details` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
+
         fetch_and_save(end_point='/api/external/bumps/{}', destination_table='bumps_info', use_ids=bump_ids)
+
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.bumps_info`  as
+                                   SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.bumps_info` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
     except:
         pass
     pub_sub_message_publisher(project_id=project_id, topic ='thrive_cart_downsells_trigger',
@@ -49,7 +84,16 @@ def fetch_downsells(event, context):
     try:
         fetch_and_save(end_point='/api/external/downsells/{}/pricing_options',
                        destination_table='downsells_price_details', use_ids=downsell_id)
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.downsells_price_details`  as
+                            SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.downsells_price_details` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
+
         fetch_and_save(end_point='/api/external/downsells/{}', destination_table='downsells_info', use_ids=downsell_id)
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.downsells_info`  as
+                            SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.downsells_info` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
     except:
         pass
     pub_sub_message_publisher(project_id=project_id, topic='thrive_cart_upsells_trigger',
@@ -60,7 +104,16 @@ def fetch_upsells(event, context):
     try:
         fetch_and_save(end_point='/api/external/upsells/{}/pricing_options',
                        destination_table='upsells_price_details', use_ids=upsell_ids)
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.upsells_price_details`  as
+                            SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.upsells_price_details` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
+
         fetch_and_save(end_point='/api/external/upsells/{}', destination_table='upsells_info', use_ids=upsell_ids)
+        update_table = """create or replace table `arboreal-cat-451816-n0.thrive_cart.upsells_info`  as
+                            SELECT distinct * FROM `arboreal-cat-451816-n0.thrive_cart.upsells_info` """
+        query_job = bq_client.query(update_table)
+        query_job.result()
     except:
         pass
     pub_sub_message_publisher(project_id=project_id, topic='thrive_cart_affiliates_trigger',
@@ -234,9 +287,9 @@ def fetch_and_save_webjam(platform, end_point, dict_key, write_options, destinat
 def fetch_webinarjam(event, context):
     try:
         webinar_ids = fetch_and_save_webjam(platform='webinarjam', end_point='webinars', dict_key = 'webinars',
-                              write_options='overwrite', destination_table = 'webinars', id_col = 'webinar_id')
+                              write_options='append', destination_table = 'webinars', id_col = 'webinar_id')
         fetch_and_save_webjam(platform='webinarjam', end_point='webinar', dict_key = 'webinar',
-                              write_options='overwrite', destination_table = 'webinar_details', use_ids=webinar_ids)
+                              write_options='append', destination_table = 'webinar_details', use_ids=webinar_ids)
         fetch_and_save_webjam(platform='webinarjam', end_point='registrants', dict_key = 'registrants',
                               write_options='append', destination_table = 'registrants', use_ids=webinar_ids, registrants=True)
     except:
@@ -245,8 +298,430 @@ def fetch_webinarjam(event, context):
 
 def fetch_everwebinar(event, context):
     webinar_ids = fetch_and_save_webjam(platform='everwebinar', end_point='webinars', dict_key = 'webinars',
-                          write_options='overwrite', destination_table = 'webinars', id_col = 'webinar_id')
+                          write_options='append', destination_table = 'webinars', id_col = 'webinar_id')
     fetch_and_save_webjam(platform='everwebinar', end_point='webinar', dict_key = 'webinar',
-                          write_options='overwrite', destination_table = 'webinar_details', use_ids=webinar_ids)
+                          write_options='append', destination_table = 'webinar_details', use_ids=webinar_ids)
     fetch_and_save_webjam(platform='everwebinar', end_point='registrants', dict_key = 'registrants',
                           write_options='append', destination_table = 'registrants', use_ids=webinar_ids, registrants=True)
+
+# hyros
+
+headers = {
+    'API-Key': 'API_c1c14fe7384d5050491b9d0c401184bd6facb348ccc8c59d2a53cdcec9c14332'
+}
+hyros_save = BqDataTransfers(gcp_project_id=project_id, bq_data_set='hyros')
+bq_client = hyros_save.get_bq_client(
+    "/Users/shami/Library/Mobile Documents/com~apple~CloudDocs/Personal Projects/vexis/vexis_bq_writter.json"
+)
+
+def _process_and_save_df(df: pd.DataFrame, table_id: str, date, page_id):
+    """
+    Aligns and uploads the DataFrame to BigQuery.
+    Adds missing columns to table or DataFrame to ensure schema match.
+    """
+    print(f"🔄 Processing data for {table_id} | Date: {date} | Page: {page_id}")
+    try:
+        df['creationDate'] = pd.to_datetime(df['creationDate']).dt.tz_convert('UTC')
+    except:
+        df['creationDate'] = pd.to_datetime(df['creationDate'], unit='ms', utc=True)
+    try:
+        df.columns = df.columns.str.replace(r'\.', '_', regex=True)
+        align_and_upload_to_bq(df, f"hyros.{table_id}", project_id=hyros_save.gcp_project_id)
+    except Exception as e:
+        print(f"Failed to process and upload data: {e}")
+
+
+def align_and_upload_to_bq(df, table_id, project_id):
+    # Flatten list-like columns (arrays) into strings to prevent pyarrow issues
+    for col in df.columns:
+        if df[col].apply(lambda x: isinstance(x, list)).any():
+            print(f"⚠️ Flattening list column: {col}")
+            df[col] = df[col].apply(lambda x: ','.join(map(str, x)) if isinstance(x, list) else x)
+
+    # Get current table schema
+    table = bq_client.get_table(table_id)
+    bq_schema = table.schema
+
+    # Create sets for comparison
+    df_columns = set(df.columns)
+    bq_columns = set(field.name for field in bq_schema)
+
+    # Columns in df but not in BigQuery table (need to add to BQ table)
+    columns_to_add_to_bq = df_columns - bq_columns
+
+    for col in columns_to_add_to_bq:
+        dtype = df[col].dropna().infer_objects().dtype
+        if pd.api.types.is_string_dtype(dtype):
+            field_type = "STRING"
+        elif pd.api.types.is_bool_dtype(dtype):
+            field_type = "BOOLEAN"
+        elif pd.api.types.is_integer_dtype(dtype):
+            field_type = "INT64"
+        elif pd.api.types.is_float_dtype(dtype):
+            field_type = "FLOAT64"
+        elif pd.api.types.is_datetime64_any_dtype(dtype):
+            field_type = "TIMESTAMP"
+        else:
+            field_type = "STRING"  # fallback for complex types
+
+        query = f"""
+        ALTER TABLE `{table_id}`
+        ADD COLUMN `{col}` {field_type};
+        """
+        bq_client.query(query).result()
+        print(f"➕ Added column `{col}` ({field_type}) to {table_id}")
+
+    # Columns in BQ table but not in df (need to add as nulls)
+    columns_to_add_to_df = bq_columns - df_columns
+    for col in columns_to_add_to_df:
+        dtype = next(field.field_type for field in bq_schema if field.name == col)
+        if dtype == "STRING":
+            df[col] = None
+        elif dtype in ["INT64", "FLOAT64", "BOOLEAN"]:
+            df[col] = np.nan
+        elif dtype == "TIMESTAMP":
+            df[col] = pd.NaT
+        else:
+            df[col] = None  # fallback
+
+    # Reorder columns to match BQ schema
+    df = df[[field.name for field in bq_schema]]
+
+    # Upload to BigQuery
+    job = bq_client.load_table_from_dataframe(df, table_id)
+    job.result()  # Wait for completion
+    print(f"✅ Uploaded {len(df)} rows to {table_id}")
+
+def fetch_and_store_hyros_data(
+    endpoint: str,
+    destination_table: str,
+    start_date: str = None,
+    end_date: str = None,
+    use_date_and_pagination: bool = True,
+):
+    resume_table = f"{destination_table}_resume_state"
+    dataset_id = hyros_save.bq_data_set
+    full_table_id = f"{hyros_save.gcp_project_id}.{dataset_id}.{resume_table}"
+
+    def get_resume_state():
+        try:
+            query = f"SELECT page_id FROM `{full_table_id}` LIMIT 1"
+            result = bq_client.query(query).result()
+            row = next(result, None)
+            if row:
+                return int(row.page_id)
+        except Exception as e:
+            print(f"Couldn't read resume state from BQ: {e}")
+        return 1  # default page_id
+
+    def save_resume_state(page_id):
+        df = pd.DataFrame([{"page_id": int(page_id)}])
+        hyros_save.start_transfer_df(
+            bq_client=bq_client,
+            df=df,
+            destination_table=resume_table,
+            write_options='overwrite'
+        )
+        print(f"Saved resume state: page_id={page_id}")
+
+    if use_date_and_pagination:
+        if not start_date or not end_date:
+            raise ValueError("Both 'start_date' and 'end_date' are required when using pagination.")
+
+        # Convert to full-day datetime strings
+        start_dt = datetime.fromisoformat(start_date).replace(hour=0, minute=0, second=0, microsecond=0)
+        end_dt = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59, microsecond=0)
+        fromDate = start_dt.isoformat()
+        toDate = end_dt.isoformat()
+
+        page_id = get_resume_state()
+        page_counter = 0
+        collected_pages = []
+
+        while True:
+            url = f"https://api.hyros.com/v1/api/v1.0/{endpoint}?fromDate={fromDate}&toDate={toDate}&pageSize=250&pageId={page_id}"
+            print(f"Request: {url}")
+            request = Request(url, headers=headers)
+
+            try:
+                response_body = urlopen(request).read()
+                json_str = response_body.decode('utf-8')
+                data = json.loads(json_str)
+                page_df = pd.json_normalize(data['result'])
+
+                if page_df.empty:
+                    print(f"No data for date range {start_date} to {end_date}, page {page_id}")
+                    break
+
+                collected_pages.append(page_df)
+                page_counter += 1
+                next_page = data.get('nextPageId')
+
+                # Process & save every 10 pages
+                if page_counter % 10 == 0:
+                    combined_df = pd.concat(collected_pages, ignore_index=True)
+                    _process_and_save_df(combined_df, destination_table, start_date, page_id)
+                    collected_pages = []
+                    save_resume_state(next_page)
+
+                # If no more pages, process remaining data and save resume
+                if not next_page:
+                    if collected_pages:
+                        combined_df = pd.concat(collected_pages, ignore_index=True)
+                        _process_and_save_df(combined_df, destination_table, start_date, page_id)
+                    save_resume_state(1)  # reset tracker
+                    break
+
+                page_id = next_page
+
+            except Exception as e:
+                print(f"Error on page {page_id}: {e}")
+                return
+
+    else:
+        print(f"Fetching non-date endpoint: {endpoint}")
+        url = f"https://api.hyros.com/v1/api/v1.0/{endpoint}"
+        request = Request(url, headers=headers)
+
+        try:
+            response_body = urlopen(request).read()
+            json_str = response_body.decode('utf-8')
+            data = json.loads(json_str)
+            df = pd.json_normalize(data['result'])
+
+            if df.empty:
+                print("No data returned.")
+            else:
+                _process_and_save_df(df, destination_table, "n/a", "n/a")
+        except Exception as e:
+            print(f"API call failed: {e}")
+
+today = datetime.utcnow().date().isoformat()
+# def hyros_sales(event, context):
+def hyros_sales():
+    fetch_and_store_hyros_data(
+        endpoint='sales',
+        destination_table='sales',
+        start_date=today,
+        end_date=today
+    )
+hyros_sales()
+
+def hyros_leads(event, context):
+    fetch_and_store_hyros_data(
+        endpoint='leads',
+        destination_table='leads',
+        start_date='2025-04-17',
+        end_date='2025-04-17'
+    )
+
+def hyros_ads(event, context):
+    fetch_and_store_hyros_data(
+        endpoint='ads',
+        destination_table='ads',
+        start_date='2025-01-01',
+        end_date='2025-12-31'
+    )
+
+
+def hyros_ad_acc_attribution(event, context):
+    date_str=None
+    ids=["435259910560360","807026429461936","772278259603420","837171519780760"]
+    destination_table="ad_account_attribution"
+
+    # Use today's date in UTC if no date is provided
+    if date_str is None:
+        date_obj = datetime.utcnow().date()
+    else:
+        date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+    start_date = f"{date_obj}T00:00:00Z"
+    end_date = f"{date_obj}T23:59:59Z"
+
+    fields = "sales,calls,qualified_calls,unqualified_calls,cost_per_call,cost_per_qualified_call,cost_per_sale,leads,cost_per_lead,total_revenue,revenue,recurring_revenue,profit,new_leads,cost_per_new_lead,roi,roas,refund,refund_count,refund_sales_percentage,refund_revenue_percentage,unique_sales,cost_per_unique_sale,cost,unique_customers,cost_per_unique_customer,time_of_sale_attribution,time_of_call_attribution,unique_customers_revenue,net_profit,hard_costs"
+    for id in ids:
+        full_url = f"https://api.hyros.com/v1/api/v1.0/attribution/ad-account?attributionModel=last_click&startDate={start_date}&endDate={end_date}&fields={fields}&ids={id}"
+        print(full_url)
+        try:
+            print(f"📡 Fetching Hyros data for {date_obj} (Ad ID: {ids})")
+            request = Request(full_url, headers=headers)
+            with urlopen(request) as response:
+                response_body = json.loads(response.read())
+
+            data = response_body.get("result", [])
+            print(data)
+            if not data:
+                print("⚠️ No data returned.")
+                return
+
+            df = pd.DataFrame(data)
+            df["date"] = pd.to_datetime(date_obj)
+
+            truncate = f"""delete FROM `arboreal-cat-451816-n0.hyros.ad_account_attribution`
+              where id = '{id}' and date = date('{date_obj}')"""
+            bq_client.query(truncate.format(id=id, date=date_obj)).result()
+
+            hyros_save.start_transfer_df(
+                bq_client=bq_client,
+                df=df,
+                destination_table=destination_table,
+                write_options='append'
+            )
+
+            print(f"✅ Saved {len(df)} rows to `{destination_table}` for {date_obj}")
+
+        except HTTPError as e:
+            print(f"❌ HTTP Error: {e.code}")
+            print(e.read().decode())
+
+
+def chunk_list(input_list, chunk_size):
+    for i in range(0, len(input_list), chunk_size):
+        yield input_list[i:i + chunk_size]
+
+def fetch_hyros_journey_data(event, context):
+    today = datetime.utcnow().strftime('%Y-%m-%d')
+    query = f"""
+        SELECT DISTINCT id
+        FROM `arboreal-cat-451816-n0.hyros.leads`
+        WHERE TIMESTAMP_TRUNC(creationDate, DAY) >= TIMESTAMP("{today}") 
+    """
+    lead_ids = [row.id for row in bq_client.query(query).result()]
+
+    if not lead_ids:
+        print("⚠️ No lead IDs found for today.")
+        return None
+
+    print(f"📡 Fetching Hyros user journey data for {len(lead_ids)} leads...")
+
+    all_data = []
+
+    for chunk in chunk_list(lead_ids, 1):
+        params = [("ids", lead_id) for lead_id in chunk]
+        query_string = urlencode(params)
+        url = f"https://api.hyros.com/v1/api/v1.0/leads/journey?{query_string}"
+
+        try:
+            request = Request(url, headers=headers)
+            with urlopen(request) as response:
+                response_body = json.loads(response.read())
+                batch_data = response_body.get("result", [])
+                all_data.extend(batch_data)
+                print(f"Retrieved {len(batch_data)} records for batch of {len(chunk)} leads")
+
+        except HTTPError as e:
+            print(f"HTTP Error for batch {chunk}: {e.code}")
+            print(e.read().decode())
+        except Exception as ex:
+            print(f"Unexpected error for batch {chunk}: {str(ex)}")
+
+    if not all_data:
+        print("No data returned from any batch.")
+        return None
+
+    df = pd.DataFrame(all_data)
+    df["fetched_at"] = pd.to_datetime(datetime.utcnow())
+
+    # Remove duplicates by checking against existing records (assumes unique 'leadId')
+    # existing_ids_query = "SELECT DISTINCT leadId FROM `arboreal-cat-451816-n0.hyros.user_journey`"
+    # existing_ids = {row.leadId for row in bq_client.query(existing_ids_query).result() if hasattr(row, 'leadId')}
+
+    # if "leadId" in df.columns:
+    #     df = df[~df["leadId"].isin(existing_ids)]
+    #     print(f"Filtered down to {len(df)} new records after removing duplicates.")
+    #
+    # if df.empty:
+    #     print("✅ No new unique data to insert.")
+    #     return None
+
+    hyros_save.start_transfer_df(
+        bq_client=bq_client,
+        df=df,
+        destination_table='user_journey',
+        write_options='append'
+    )
+
+    return df
+
+def fetch_hyros_sources_data(event, context):
+    query = """
+        SELECT DISTINCT lead.firstSource.adSource.adSourceId AS adSourceId
+        FROM `arboreal-cat-451816-n0.hyros.user_journey`
+        WHERE lead.firstSource.adSource.adSourceId IS NOT NULL
+    """
+    ad_source_ids = [row.adSourceId for row in bq_client.query(query).result()]
+
+    if not ad_source_ids:
+        print("⚠️ No adSourceIds found.")
+        return None
+
+    print(f"📡 Fetching Hyros sources data for {len(ad_source_ids)} ad sources...")
+
+    integration_types = ["FACEBOOK", "GOOGLE", "SNAPCHAT", "TIKTOK", "TWITTER", "LINKEDIN"]
+    include_disregarded_options = ["true", "false"]
+    include_organic_options = ["true", "false"]
+    page_size = 250
+
+    for integration_type in integration_types:
+        for include_disregarded in include_disregarded_options:
+            for include_organic in include_organic_options:
+                print(f"🔍 Integration: {integration_type} | Disregarded: {include_disregarded} | Organic: {include_organic}")
+                all_data = []
+                i = 0
+
+                for chunk in chunk_list(ad_source_ids, 50):
+                    i += 1
+                    ids_param = ",".join(chunk)
+                    page_id = 1
+
+                    while True:
+                        url = (
+                            f"https://api.hyros.com/v1/api/v1.0/sources?"
+                            f"adSourceIds={ids_param}&"
+                            f"includeOrganic={include_organic}&"
+                            f"includeDisregarded={include_disregarded}&"
+                            f"integrationType={integration_type}&"
+                            f"pageSize={page_size}&"
+                            f"pageId={page_id}"
+                        )
+
+                        try:
+                            request = Request(url, headers=headers)
+                            with urlopen(request) as response:
+                                response_body = json.loads(response.read())
+                                batch_data = response_body.get("result", [])
+                                print(f"📦 Retrieved {len(batch_data)} records | page {page_id}")
+                                all_data.extend(batch_data)
+
+                                next_page = response_body.get("nextPageId")
+                                if not next_page:
+                                    break
+                                page_id = next_page
+
+                        except HTTPError as e:
+                            print(f"HTTP Error for chunk {chunk} | {integration_type} | Disregarded={include_disregarded}, Organic={include_organic}: {e.code}")
+                            print(e.read().decode())
+                            break
+                        except Exception as ex:
+                            print(f"Unexpected error for chunk {chunk} | {integration_type} | Disregarded={include_disregarded}, Organic={include_organic}: {str(ex)}")
+                            break
+
+                # 🔁 Flush all_data at the end of each combination
+                if all_data:
+                    df = pd.DataFrame(all_data)
+                    df["fetched_at"] = pd.to_datetime(datetime.utcnow())
+                    df["integration_type"] = integration_type
+                    df["include_disregarded"] = include_disregarded
+                    df["include_organic"] = include_organic
+
+                    print(f"📤 Uploading {len(df)} rows to BigQuery for this combo")
+                    hyros_save.start_transfer_df(
+                        bq_client=bq_client,
+                        df=df,
+                        destination_table='sources',
+                        write_options='append'
+                    )
+                else:
+                    print("🚫 No data collected for this combination.")
+
+    print("✅ Hyros sources data fetching complete for all combinations.")

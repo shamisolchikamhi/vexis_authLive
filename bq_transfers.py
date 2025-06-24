@@ -3,6 +3,14 @@ from google.oauth2 import service_account
 from google.auth import default
 from google.cloud import pubsub_v1
 import json
+import os
+
+# Authenticate using service account
+project_id = 'arboreal-cat-451816-n0'
+# try:
+#     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = '/Users/shami/Library/Mobile Documents/com~apple~CloudDocs/Personal Projects/vexis/vexis_bq_writter.json'
+# except:
+#     pass
 
 class BqDataTransfers:
     def __init__(self, gcp_project_id, bq_data_set):
