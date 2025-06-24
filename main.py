@@ -2,13 +2,16 @@ from api_request_funtions import ApiGet
 from api_request_funtions import ApiGetRequest
 from bq_transfers import BqDataTransfers
 from  bq_transfers import pub_sub_message_publisher
-import json
 import io
 import time
-from urllib.request import Request, urlopen
-import pandas as pd
-from datetime import datetime, timedelta
 import numpy as np
+from datetime import datetime
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError
+import pandas as pd
+import json
+from urllib.parse import urlencode
+
 
 project_id = 'arboreal-cat-451816-n0'
 thrivecart_get = ApiGet(http='thrivecart.com', api_key='TZ5TJYBR-FDB85IBI-0RFTB00N-VQ7ZFY2S')
@@ -446,21 +449,24 @@ def fetch_and_store_hyros_data(
                 _process_and_save_df(df, destination_table, "n/a", "n/a")
         except Exception as e:
             print(f"API call failed: {e}")
-today = datetime.utcnow().date().isoformat() 
-def hyros_sales(event, context):
+
+today = datetime.utcnow().date().isoformat()
+# def hyros_sales(event, context):
+def hyros_sales():
     fetch_and_store_hyros_data(
         endpoint='sales',
         destination_table='sales',
-        start_date='2024-01-01',
-        end_date='2024-12-31'
+        start_date=today,
+        end_date=today
     )
+hyros_sales()
 
 def hyros_leads(event, context):
     fetch_and_store_hyros_data(
         endpoint='leads',
         destination_table='leads',
-        start_date='2024-01-01',
-        end_date='2024-12-31'
+        start_date='2025-04-17',
+        end_date='2025-04-17'
     )
 
 def hyros_ads(event, context):
@@ -470,3 +476,206 @@ def hyros_ads(event, context):
         start_date='2025-01-01',
         end_date='2025-12-31'
     )
+
+
+def hyros_ad_acc_attribution(event, context):
+    date_str=None
+    ids=["435259910560360","807026429461936","772278259603420","837171519780760"]
+    destination_table="ad_account_attribution"
+
+    # Use today's date in UTC if no date is provided
+    if date_str is None:
+        date_obj = datetime.utcnow().date()
+    else:
+        date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+
+    start_date = f"{date_obj}T00:00:00Z"
+    end_date = f"{date_obj}T23:59:59Z"
+
+    fields = "sales,calls,qualified_calls,unqualified_calls,cost_per_call,cost_per_qualified_call,cost_per_sale,leads,cost_per_lead,total_revenue,revenue,recurring_revenue,profit,new_leads,cost_per_new_lead,roi,roas,refund,refund_count,refund_sales_percentage,refund_revenue_percentage,unique_sales,cost_per_unique_sale,cost,unique_customers,cost_per_unique_customer,time_of_sale_attribution,time_of_call_attribution,unique_customers_revenue,net_profit,hard_costs"
+    for id in ids:
+        full_url = f"https://api.hyros.com/v1/api/v1.0/attribution/ad-account?attributionModel=last_click&startDate={start_date}&endDate={end_date}&fields={fields}&ids={id}"
+        print(full_url)
+        try:
+            print(f"📡 Fetching Hyros data for {date_obj} (Ad ID: {ids})")
+            request = Request(full_url, headers=headers)
+            with urlopen(request) as response:
+                response_body = json.loads(response.read())
+
+            data = response_body.get("result", [])
+            print(data)
+            if not data:
+                print("⚠️ No data returned.")
+                return
+
+            df = pd.DataFrame(data)
+            df["date"] = pd.to_datetime(date_obj)
+
+            truncate = f"""delete FROM `arboreal-cat-451816-n0.hyros.ad_account_attribution`
+              where id = '{id}' and date = date('{date_obj}')"""
+            bq_client.query(truncate.format(id=id, date=date_obj)).result()
+
+            hyros_save.start_transfer_df(
+                bq_client=bq_client,
+                df=df,
+                destination_table=destination_table,
+                write_options='append'
+            )
+
+            print(f"✅ Saved {len(df)} rows to `{destination_table}` for {date_obj}")
+
+        except HTTPError as e:
+            print(f"❌ HTTP Error: {e.code}")
+            print(e.read().decode())
+
+
+def chunk_list(input_list, chunk_size):
+    for i in range(0, len(input_list), chunk_size):
+        yield input_list[i:i + chunk_size]
+
+def fetch_hyros_journey_data(event, context):
+    today = datetime.utcnow().strftime('%Y-%m-%d')
+    query = f"""
+        SELECT DISTINCT id
+        FROM `arboreal-cat-451816-n0.hyros.leads`
+        WHERE TIMESTAMP_TRUNC(creationDate, DAY) >= TIMESTAMP("{today}") 
+    """
+    lead_ids = [row.id for row in bq_client.query(query).result()]
+
+    if not lead_ids:
+        print("⚠️ No lead IDs found for today.")
+        return None
+
+    print(f"📡 Fetching Hyros user journey data for {len(lead_ids)} leads...")
+
+    all_data = []
+
+    for chunk in chunk_list(lead_ids, 1):
+        params = [("ids", lead_id) for lead_id in chunk]
+        query_string = urlencode(params)
+        url = f"https://api.hyros.com/v1/api/v1.0/leads/journey?{query_string}"
+
+        try:
+            request = Request(url, headers=headers)
+            with urlopen(request) as response:
+                response_body = json.loads(response.read())
+                batch_data = response_body.get("result", [])
+                all_data.extend(batch_data)
+                print(f"Retrieved {len(batch_data)} records for batch of {len(chunk)} leads")
+
+        except HTTPError as e:
+            print(f"HTTP Error for batch {chunk}: {e.code}")
+            print(e.read().decode())
+        except Exception as ex:
+            print(f"Unexpected error for batch {chunk}: {str(ex)}")
+
+    if not all_data:
+        print("No data returned from any batch.")
+        return None
+
+    df = pd.DataFrame(all_data)
+    df["fetched_at"] = pd.to_datetime(datetime.utcnow())
+
+    # Remove duplicates by checking against existing records (assumes unique 'leadId')
+    # existing_ids_query = "SELECT DISTINCT leadId FROM `arboreal-cat-451816-n0.hyros.user_journey`"
+    # existing_ids = {row.leadId for row in bq_client.query(existing_ids_query).result() if hasattr(row, 'leadId')}
+
+    # if "leadId" in df.columns:
+    #     df = df[~df["leadId"].isin(existing_ids)]
+    #     print(f"Filtered down to {len(df)} new records after removing duplicates.")
+    #
+    # if df.empty:
+    #     print("✅ No new unique data to insert.")
+    #     return None
+
+    hyros_save.start_transfer_df(
+        bq_client=bq_client,
+        df=df,
+        destination_table='user_journey',
+        write_options='append'
+    )
+
+    return df
+
+def fetch_hyros_sources_data(event, context):
+    query = """
+        SELECT DISTINCT lead.firstSource.adSource.adSourceId AS adSourceId
+        FROM `arboreal-cat-451816-n0.hyros.user_journey`
+        WHERE lead.firstSource.adSource.adSourceId IS NOT NULL
+    """
+    ad_source_ids = [row.adSourceId for row in bq_client.query(query).result()]
+
+    if not ad_source_ids:
+        print("⚠️ No adSourceIds found.")
+        return None
+
+    print(f"📡 Fetching Hyros sources data for {len(ad_source_ids)} ad sources...")
+
+    integration_types = ["FACEBOOK", "GOOGLE", "SNAPCHAT", "TIKTOK", "TWITTER", "LINKEDIN"]
+    include_disregarded_options = ["true", "false"]
+    include_organic_options = ["true", "false"]
+    page_size = 250
+
+    for integration_type in integration_types:
+        for include_disregarded in include_disregarded_options:
+            for include_organic in include_organic_options:
+                print(f"🔍 Integration: {integration_type} | Disregarded: {include_disregarded} | Organic: {include_organic}")
+                all_data = []
+                i = 0
+
+                for chunk in chunk_list(ad_source_ids, 50):
+                    i += 1
+                    ids_param = ",".join(chunk)
+                    page_id = 1
+
+                    while True:
+                        url = (
+                            f"https://api.hyros.com/v1/api/v1.0/sources?"
+                            f"adSourceIds={ids_param}&"
+                            f"includeOrganic={include_organic}&"
+                            f"includeDisregarded={include_disregarded}&"
+                            f"integrationType={integration_type}&"
+                            f"pageSize={page_size}&"
+                            f"pageId={page_id}"
+                        )
+
+                        try:
+                            request = Request(url, headers=headers)
+                            with urlopen(request) as response:
+                                response_body = json.loads(response.read())
+                                batch_data = response_body.get("result", [])
+                                print(f"📦 Retrieved {len(batch_data)} records | page {page_id}")
+                                all_data.extend(batch_data)
+
+                                next_page = response_body.get("nextPageId")
+                                if not next_page:
+                                    break
+                                page_id = next_page
+
+                        except HTTPError as e:
+                            print(f"HTTP Error for chunk {chunk} | {integration_type} | Disregarded={include_disregarded}, Organic={include_organic}: {e.code}")
+                            print(e.read().decode())
+                            break
+                        except Exception as ex:
+                            print(f"Unexpected error for chunk {chunk} | {integration_type} | Disregarded={include_disregarded}, Organic={include_organic}: {str(ex)}")
+                            break
+
+                # 🔁 Flush all_data at the end of each combination
+                if all_data:
+                    df = pd.DataFrame(all_data)
+                    df["fetched_at"] = pd.to_datetime(datetime.utcnow())
+                    df["integration_type"] = integration_type
+                    df["include_disregarded"] = include_disregarded
+                    df["include_organic"] = include_organic
+
+                    print(f"📤 Uploading {len(df)} rows to BigQuery for this combo")
+                    hyros_save.start_transfer_df(
+                        bq_client=bq_client,
+                        df=df,
+                        destination_table='sources',
+                        write_options='append'
+                    )
+                else:
+                    print("🚫 No data collected for this combination.")
+
+    print("✅ Hyros sources data fetching complete for all combinations.")
