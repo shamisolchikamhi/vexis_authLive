@@ -596,3 +596,86 @@ def fetch_hyros_journey_data(event, context):
     )
 
     return df
+
+def fetch_hyros_sources_data(event, context):
+    query = """
+        SELECT DISTINCT lead.firstSource.adSource.adSourceId AS adSourceId
+        FROM `arboreal-cat-451816-n0.hyros.user_journey`
+        WHERE lead.firstSource.adSource.adSourceId IS NOT NULL
+    """
+    ad_source_ids = [row.adSourceId for row in bq_client.query(query).result()]
+
+    if not ad_source_ids:
+        print("⚠️ No adSourceIds found.")
+        return None
+
+    print(f"📡 Fetching Hyros sources data for {len(ad_source_ids)} ad sources...")
+
+    integration_types = ["FACEBOOK", "GOOGLE", "SNAPCHAT", "TIKTOK", "TWITTER", "LINKEDIN"]
+    include_disregarded_options = ["true", "false"]
+    include_organic_options = ["true", "false"]
+    page_size = 250
+
+    for integration_type in integration_types:
+        for include_disregarded in include_disregarded_options:
+            for include_organic in include_organic_options:
+                print(f"🔍 Integration: {integration_type} | Disregarded: {include_disregarded} | Organic: {include_organic}")
+                all_data = []
+                i = 0
+
+                for chunk in chunk_list(ad_source_ids, 50):
+                    i += 1
+                    ids_param = ",".join(chunk)
+                    page_id = 1
+
+                    while True:
+                        url = (
+                            f"https://api.hyros.com/v1/api/v1.0/sources?"
+                            f"adSourceIds={ids_param}&"
+                            f"includeOrganic={include_organic}&"
+                            f"includeDisregarded={include_disregarded}&"
+                            f"integrationType={integration_type}&"
+                            f"pageSize={page_size}&"
+                            f"pageId={page_id}"
+                        )
+
+                        try:
+                            request = Request(url, headers=headers)
+                            with urlopen(request) as response:
+                                response_body = json.loads(response.read())
+                                batch_data = response_body.get("result", [])
+                                print(f"📦 Retrieved {len(batch_data)} records | page {page_id}")
+                                all_data.extend(batch_data)
+
+                                next_page = response_body.get("nextPageId")
+                                if not next_page:
+                                    break
+                                page_id = next_page
+
+                        except HTTPError as e:
+                            print(f"HTTP Error for chunk {chunk} | {integration_type} | Disregarded={include_disregarded}, Organic={include_organic}: {e.code}")
+                            print(e.read().decode())
+                            break
+                        except Exception as ex:
+                            print(f"Unexpected error for chunk {chunk} | {integration_type} | Disregarded={include_disregarded}, Organic={include_organic}: {str(ex)}")
+                            break
+
+                # 🔁 Flush all_data at the end of each combination
+                if all_data:
+                    df = pd.DataFrame(all_data)
+                    df["fetched_at"] = pd.to_datetime(datetime.utcnow())
+                    df["integration_type"] = integration_type
+                    df["include_disregarded"] = include_disregarded
+                    df["include_organic"] = include_organic
+
+                    print(f"📤 Uploading {len(df)} rows to BigQuery for this combo")
+                    hyros_save.start_transfer_df(
+                        bq_client=bq_client,
+                        df=df,
+                        destination_table='sources',
+                        write_options='append'
+                    )
+                else:
+                    print("🚫 No data collected for this combination.")
+
+    print("✅ Hyros sources data fetching complete for all combinations.")
